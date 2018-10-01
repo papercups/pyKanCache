@@ -11,7 +11,7 @@ import requests
 import cache
 
 
-# 响应头
+# 缓存文件响应头
 cache_headers = {
     'Server': 'nginx',
     #'Pragma': 'public',
@@ -26,7 +26,10 @@ Content_Types = {
 }
 
 app = Flask('pyKanCache')
-
+# 上游代理
+proxies = {
+    'http': 'http://127.0.0.1:8888'
+}
 
 # 代理GET请求
 @app.route('/<path:subpath>', methods = ['GET'])
@@ -46,18 +49,17 @@ def proxyGET(subpath):
         if cache_flag == 0 or resp_cache.status_code == 304:
             app.logger.debug('使用本地缓存: %s', subpath)
             cache_byte = cache.getCache(subpath)
-            # 用扩展名完成headers
-            cache_headers.update(Content_Types[cache_type])
-            cache_headers['Content-Length'] = len(cache_byte)
-            return Response(cache_byte, 200, cache_headers)
         else:
+            cache_byte = resp_cache.content
             cache_json = {
                 'deadline': str(time.time() + 2592000),
                 'version': request.args.get('version', default = None),
             }
-            cache.setCache(resp_cache.data, subpath, cache_json)
-            return resp_cache
-
+            cache.setCache(resp_cache.content, subpath, cache_json)
+        # 用扩展名完成headers
+        cache_headers.update(Content_Types[cache_type])
+        cache_headers['Content-Length'] = len(cache_byte)
+        return Response(cache_byte, 200, cache_headers)
     else:
         app.logger.debug('转发GET: %s', request.url)
         return transmitGET(request)
@@ -79,7 +81,7 @@ def transmitPOST(request):
 
     with closing(
         requests.post(
-            url, headers = headers, data = data)
+            url, headers = headers, data = data, proxies=proxies)
     ) as r:
         headers = dict(r.headers)
         if headers.get('Content-Encoding') and \
@@ -127,14 +129,18 @@ def download(request, cache_flag):
             continue
         headers[key] = value
     if cache_flag > 1:
+        app.logger.debug('验证缓存有效性: %s', request.path)
         # 时间戳格式转服务器时间戳格式
         headers['If-Modified-Since'] = \
             time.strftime('%a, %d %b %Y %H:%M:%S GMT', cache_flag)
+    else:
+        app.logger.debug('下载缓存: %s', request.url)
 
     with closing(
         requests.get(
             url, headers = headers, data = data, stream = True)
     ) as r:
+        '''
         headers = dict(r.headers)
         if headers.get('Content-Encoding') and \
            headers['Content-Encoding'] in ('gzip', 'deflate'):
@@ -142,7 +148,8 @@ def download(request, cache_flag):
         if headers.get('Transfer-Encoding'):
             del headers['Transfer-Encoding']
         headers['Content-Length'] = len(r.content)
-
-        return Response(r.content, r.status_code, headers)
+        '''
+        #return Response(r.content, r.status_code, headers)
+        return r
 
 app.run(port = 8007, debug = True)

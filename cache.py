@@ -39,16 +39,16 @@ def checkCache(cache_path, version):
     if cache_path not in check_json:
         return 1
 
+    file_path = os.path.join(CACHE_PATH, cache_path)
+    # 检查文件是否存在
+    if not os.path.isfile(file_path):
+        return 1
+
     # 带version的先检查version
     if version:
         # 不一致的的话就要重新下载
         if version != check_json[cache_path]['version']:
             return 1
-
-    file_path = os.path.join(CACHE_PATH, cache_path)
-    # 检查文件是否存在
-    if not os.path.isfile(file_path):
-        return 1
 
     # 检查是否过期
     deadline = float(check_json[cache_path]['deadline'])
@@ -89,4 +89,4 @@ def setCache(cache_byte, cache_path, cache_json):
     with closing(
         open(CHECK_JSON_PATH, 'w')
     ) as fp:
-        json.dump(check_json, fp)
+        json.dump(check_json.copy(), fp)
